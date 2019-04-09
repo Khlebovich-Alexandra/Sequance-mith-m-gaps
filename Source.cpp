@@ -3,7 +3,13 @@
 #include <vector>
 #include <algorithm>
 #include <stdio.h>
+#include <iomanip>
 using namespace std;
+
+int getMax(int a, int b);
+int getMax(vector<int>& tree, int l, int r);
+void buildTree(vector<int>& tree, vector<int>& tmpArray);
+void updateTree(vector<int>& tree, int position, int newValue);
 
 int main()
 {
@@ -22,58 +28,128 @@ int main()
 		fprintf_s(outFile, "%d", n);
 		return 0;
 	}
-	int* startVector = new int[n];
-	int** matrix = new int*[m + 2];
-	for (int i = 0; i < m + 2; i++)
+	vector<int> startVector(n);
+	vector<int> arrayForCompression(n, 0);
+	int newN;
+	_asm
 	{
-		matrix[i] = new int[n];
+		bsr eax, n
+		bsf ebx, n
+		cmp eax, ebx
+		jne first
+		dec eax
+		first :
+		mov newN, eax
 	}
+	newN = 1 << newN + 1;
+	vector<int> tree(2 * newN - 1, 0);
+	vector<int> treePrev(2 * newN - 1, 0);
+	vector<int> tmpArray(n);
+
 	for (int i = 0; i < n; i++)
 	{
 		fscanf_s(inFile, "%d", &startVector[i]);
 	}
+	copy(startVector.begin(), startVector.end(), arrayForCompression.begin());
+	sort(arrayForCompression.begin(), arrayForCompression.end(), less<int>());
+	vector<int>::iterator it = unique(arrayForCompression.begin(), arrayForCompression.end());
 	for (int i = 0; i < n; i++)
 	{
-		matrix[0][i] = 0;
+		int position = lower_bound(arrayForCompression.begin(), it, startVector.at(i), less<int>()) - arrayForCompression.begin();
+		startVector.at(i) = position;
 	}
 
-	for (int step = 1; step < m + 2; step++)
+
+	for (int step = 0; step <= m; step++)
 	{
-		matrix[step][n - 1] = 1;
-		for (int i = n - 2; i >= 0; i--)
+		for (int i = 0; i < n; i++)
 		{
-			int res = 0;
-			for (int j = n - 1; j > i; j--)
+			int res = getMax(tree, 0, startVector.at(i) - 1);
+			int maxInPrevStep = getMax(treePrev, 0, i - 1);
+			if (maxInPrevStep > res)
 			{
-				if (startVector[i] < startVector[j] && res < matrix[step][j])
-				{
-					res = matrix[step][j];
-				}
+				res = maxInPrevStep;
 			}
-			for (int j = i + 1; j < n; j++)
-			{
-				if (res < matrix[step - 1][j])
-				{
-					res = matrix[step - 1][j];
-				}
-			}
-			matrix[step][i] = res + 1;
+			res++;
+			tmpArray.at(i) = res;
+			updateTree(tree, startVector.at(i), res);
 		}
+		buildTree(treePrev, tmpArray);
+		fill(tree.begin(), tree.end(), 0);
 	}
+	
 
-	for (int i = 1; i < m + 2; i++)
-	{
-		for (int j = 0; j < n; j++)
-
-		{
-			cout << matrix[i][j] << ' ';
-		}
-		cout << endl;
-	}
-
-	int result = *max_element(matrix[m + 1], matrix[m + 1] + n);
-	cout << result;
+	int result = treePrev.at(0);
 	fprintf_s(outFile, "%d", result);
 	system("pause");
 	return 0;
+}
+
+int getMax(int a, int b)
+{
+	return (a > b) ? a : b;
+}
+
+int getMax(vector<int>& tree, int l, int r)
+{
+	if (r < l)
+
+	{
+		return 0;
+	}
+	l++;
+	r++;
+	int result = 0;
+	int n = tree.size() / 2;
+	l += n - 1, r += n - 1;
+	bool flag = true;
+	while (l <= r)
+	{
+		// если l - правый сын своего родителя, 
+		// учитываем его фундаментальный отрезок
+		if (l % 2 == 0)
+			result = getMax(result, tree[l++]);
+		// если r - левый сын своего родителя, 
+		// учитываем его фундаментальный отрезок
+		if (r % 2 == 1)
+			result = getMax(result, tree[r--]);
+		// сдвигаем указатели на уровень выше
+		l = (l - 1) / 2;
+		r = (r - 1) / 2;
+		if (!flag)
+		{
+			break;
+		}
+		if (l == r)
+		{
+			flag = false;
+		}
+	}
+	return result;
+}
+
+void buildTree(vector<int>& tree, vector<int>& tmpArray)
+{
+	int newN = (tree.size() + 1) / 2;
+	int n = tmpArray.size();
+	fill(tree.begin(), tree.end(), 0);
+	copy(tmpArray.begin(), tmpArray.end(), tree.begin() + newN - 1);
+	for (int i = newN - 1; i > 0; i--)
+	{
+		tree[i - 1] = max(tree[2 * i], tree[2 * i - 1]);
+	}
+}
+
+void updateTree(vector<int>& tree, int position, int newValue)
+{
+	int newN = (tree.size() + 1) / 2;
+	position += newN - 1;
+	tree[position] = newValue;
+	position = (position - 1) / 2;
+	while (position)
+	{
+		tree[position] = getMax(tree[2 * position + 1], tree[2 * position + 2]);
+		position = (position - 1) / 2;
+	}
+	tree[0] = getMax(tree[1], tree[2]);
 }
